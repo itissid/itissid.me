@@ -1,0 +1,26 @@
+---
+version: 1
+# This argument in logging post python
+# 2.7 which allows loggers to be at the module
+# level and you can still import them
+# before you configure a logger. Example:
+#   import foo
+#   logging.config.fileConfig(....)
+#
+# This is logging configuration for testing
+disable_existing_loggers: False
+formatters:
+    simple:
+        format: "%(asctime)s - %(levelname)s- %(module)s - %(funcName)s - %(thread)d - %(message)s"
+
+handlers:
+    # This is used for logging to the console for debuging.
+    console:
+        class: logging.StreamHandler
+        level: DEBUG
+        formatter: simple
+        stream: ext://sys.stdout
+
+root:
+    level: NOTSET
+    handlers: [console]
