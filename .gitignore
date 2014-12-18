@@ -4,3 +4,9 @@ bin/
 include/
 lib/
 share/
+
+*.swp
+*.pyc
+*.swo
+
+todosu/auth_file.json

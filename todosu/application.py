@@ -3,19 +3,87 @@ from flask import (
     abort,
     jsonify,
     render_template,
-    request)
+    request,
+    redirect,
+    url_for,
+    session
+)
 
-TODOS = []
+import json
 
 app = Flask(__name__, static_url_path='')
 app.debug = True
 
+from flask_oauth import OAuth
+
+REDIRECT_URI = "/oauth2callback"
+app.REDIRECT_URI = REDIRECT_URI# one of the Redirect URIs from Google APIs console
+
+TODOS = []
+google = None
+def init():
+    with open('auth_file.json') as f:
+        auth = json.load(f)
+
+        app.secret_key = auth['client_secret']
+        oauth = OAuth()
+        global google
+        google = oauth.remote_app('google',
+                                base_url='https://www.google.com/accounts/',
+                                authorize_url=auth['auth_uri'],
+                                request_token_url=None,
+                                request_token_params={'scope': 'https://www.googleapis.com/auth/userinfo.email',
+                                                        'response_type': 'code'},
+                                access_token_url=auth['token_uri'],
+                                access_token_method='POST',
+                                access_token_params={'grant_type': 'authorization_code'},
+                                consumer_key=auth['client_id'],
+                                consumer_secret=auth['client_secret'])
+
+init()
+
 
 @app.route('/')
 def index():
+    access_token = session.get('access_token')
+    if access_token is None:
+        return redirect(url_for('login'))
+
+    access_token = access_token[0]
+    from urllib2 import Request, urlopen, URLError
+
+    headers = {'Authorization': 'OAuth '+access_token}
+    req = Request('https://www.googleapis.com/oauth2/v1/userinfo',
+                  None, headers)
+    try:
+        res = urlopen(req)
+    except URLError, e:
+        if e.code == 401:
+            # Unauthorized - bad token
+            session.pop('access_token', None)
+            return redirect(url_for('login'))
+        return res.read()
+
     todos = filter(None, TODOS)
     print 'Todos', todos
     return render_template('index.html', todos=todos)
+    #return res.read()
+
+@app.route('/login')
+def login():
+    callback=url_for('authorized', _external=True)
+    return google.authorize(callback=callback)
+
+@app.route(REDIRECT_URI)
+@google.authorized_handler
+def authorized(resp):
+    access_token = resp['access_token']
+    session['access_token'] = access_token, ''
+    return redirect(url_for('index'))
+
+@google.tokengetter
+def get_access_token():
+    return session._get('access_token')
 
 
 @app.route('/todos/', methods=['POST'])
