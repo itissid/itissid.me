@@ -13,9 +13,9 @@ from requests_oauthlib import OAuth2Session
 from optparse import OptionParser
 import json
 from functools import wraps
+import os
 
 app = Flask(__name__, static_url_path='')
-app.debug = True
 
 # REDIRECT_URI = "/oauth2callback"
 # app.REDIRECT_URI = REDIRECT_URI# one of the Redirect URIs from Google APIs console
@@ -168,6 +168,8 @@ def get_cli_options():
         '-e', '--env', type='choice', action='store', dest='environment',
         choices=['production', 'dev'], default='dev',
         help='Environment to run on')
+    parser.add_option('-d', dest="debug", action="store_true",
+                      help = "Turn debugging on for the webserver")
     return parser.parse_args()
 
 if __name__ == '__main__':
@@ -177,10 +179,12 @@ if __name__ == '__main__':
     if env is None:
         raise ValueError('Environment has to be set to one of '
                          'dev or prod')
+
+    print "Debugging option for web server is: ", options.debug
     app.config.update(
-        DEBUG=True,
-        PROPAGATE_EXCEPTIONS=True)
-    import os
+        DEBUG=True if options.debug else False,
+        PROPAGATE_EXCEPTIONS=True if options.debug else False)
+    # TODO: Remove these once HTTPS is active
     os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
     os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = 'True'
     app.run()
