@@ -16,7 +16,7 @@ var app = app || {};
 
 		// Our template for the line of statistics at the bottom of the app.
 		statsTemplate: _.template($('#stats-template').html()),
-
+                userInfoTemplate: _.template($('#user-info-template').html()),
 		// Delegated events for creating new items, and clearing completed ones.
 		events: {
 			'keypress #new-todo': 'createOnEnter',
@@ -30,6 +30,7 @@ var app = app || {};
 		initialize: function () {
 			this.allCheckbox = this.$('#toggle-all')[0];
 			this.$input = this.$('#new-todo');
+                        this.$userInfo = this.$("#user-info");
 			this.$footer = this.$('#footer');
 			this.$main = this.$('#main');
 			this.$list = $('#todo-list');
@@ -37,6 +38,7 @@ var app = app || {};
 			this.listenTo(app.todos, 'add', this.addOne);
 			this.listenTo(app.todos, 'reset', this.addAll);
 			this.listenTo(app.todos, 'change:completed', this.filterOne);
+			app.userInfo.on('change', this.storeUserInfo, this);
 			this.listenTo(app.todos, 'filter', this.filterAll);
 			this.listenTo(app.todos, 'all', this.render);
 
@@ -69,6 +71,15 @@ var app = app || {};
 			this.allCheckbox.checked = !remaining;
 		},
 
+                storeUserInfo: function() {
+                        this.name = app.userInfo.get('name');
+                        this.email = app.userInfo.get('email');
+                        console.log(this.name+ ' ', this.email)
+                        this.$userInfo.html(this.userInfoTemplate({
+                                name: this.name,
+                                email: this.email
+                        }));
+                },
 		// Add a single todo item to the list by creating a view for it, and
 		// appending its element to the `<ul>`.
 		addOne: function (todo) {

@@ -8,82 +8,111 @@ from flask import (
     url_for,
     session
 )
+from requests_oauthlib import OAuth2Session
 
+from optparse import OptionParser
 import json
+from functools import wraps
 
 app = Flask(__name__, static_url_path='')
 app.debug = True
 
-from flask_oauth import OAuth
-
-REDIRECT_URI = "/oauth2callback"
-app.REDIRECT_URI = REDIRECT_URI# one of the Redirect URIs from Google APIs console
+# REDIRECT_URI = "/oauth2callback"
+# app.REDIRECT_URI = REDIRECT_URI# one of the Redirect URIs from Google APIs console
 
 TODOS = []
-google = None
-def init():
-    with open('auth_file.json') as f:
-        auth = json.load(f)
+# google = None
 
-        app.secret_key = auth['client_secret']
-        oauth = OAuth()
-        global google
-        google = oauth.remote_app('google',
-                                base_url='https://www.google.com/accounts/',
-                                authorize_url=auth['auth_uri'],
-                                request_token_url=None,
-                                request_token_params={'scope': 'https://www.googleapis.com/auth/userinfo.email',
-                                                        'response_type': 'code'},
-                                access_token_url=auth['token_uri'],
-                                access_token_method='POST',
-                                access_token_params={'grant_type': 'authorization_code'},
-                                consumer_key=auth['client_id'],
-                                consumer_secret=auth['client_secret'])
 
-init()
+# Just the config for oauth in the deployed file
+def get_oath_config(func):
+    @wraps(func)
+    def inner(*args, **kwargs):
+        with open('auth_file.json') as f:
+            auth = json.load(f)
+            from collections import namedtuple
+            oath_object = namedtuple(
+                'Oauth', [
+                    'provider', 'client_id', 'client_secret', 'redirect_uri',
+                    'authorization_base_url', 'token_url',
+                    'scope', 'user_info_uri'])
+            app.secret_key = auth['client_secret']
+            google_oauth_obj = oath_object(
+                provider = 'Google',
+                client_id = auth['client_id'],
+                client_secret = auth['client_secret'],
+                redirect_uri = auth['redirect_uris'][env],
+
+                # OAuth endpoints given in the Google API documentation
+                authorization_base_url = auth['authorization_base_url'],
+                token_url = auth['token_uri'],
+                scope = [
+                        "https://www.googleapis.com/auth/userinfo.email"
+                ],
+                user_info_uri = auth['user_info_uri']
+            )
+            kwargs['oauth_config'] = google_oauth_obj
+            return func(*args, **kwargs)
+    return inner
 
 
 @app.route('/')
-def index():
-    access_token = session.get('access_token')
-    if access_token is None:
-        return redirect(url_for('login'))
+@get_oath_config
+def index(oauth_config):
+    # If we already have the access token we can fetch resources.
+    # This means step 3 of the 3 legged oauth handshake was completed.
+    oauth_token = session.get('oauth_token')
+    if oauth_token is None:
+        return redirect(url_for('authorization'))
 
-    access_token = access_token[0]
-    from urllib2 import Request, urlopen, URLError
-
-    headers = {'Authorization': 'OAuth '+access_token}
-    req = Request('https://www.googleapis.com/oauth2/v1/userinfo',
-                  None, headers)
+    # Back here after step 3
     try:
-        res = urlopen(req)
-    except URLError, e:
-        if e.code == 401:
-            # Unauthorized - bad token
-            session.pop('access_token', None)
-            return redirect(url_for('login'))
-        return res.read()
+        google = OAuth2Session(
+            client_id=oauth_config.client_id, token=oauth_token)
+        user_info_response = google.get(oauth_config.user_info_uri)
+    except:
+        session['oauth_token'] = google.refresh_token(
+                oauth_config.auth_uri, client_id=oauth_config.client_id,
+                client_secret=oauth_config.client_secret)
+        google = OAuth2Session(oauth_config.client_id, token=token)
+        user_info_response = google.get(oauth_config.user_info_uri)
 
     todos = filter(None, TODOS)
-    print 'Todos', todos
-    return render_template('index.html', todos=todos)
-    #return res.read()
+    return render_template(
+        'index.html', todos=todos, user_info=user_info_response.json())
 
-@app.route('/login')
-def login():
-    callback=url_for('authorized', _external=True)
-    return google.authorize(callback=callback)
 
-@app.route(REDIRECT_URI)
-@google.authorized_handler
-def authorized(resp):
-    access_token = resp['access_token']
-    session['access_token'] = access_token, ''
+@app.route('/authorization')
+@get_oath_config
+def authorization(oauth_config):
+    google = OAuth2Session(
+        oauth_config.client_id, scope=oauth_config.scope,
+        redirect_uri=oauth_config.redirect_uri)
+
+    # Redirect user to Google for authorization
+    authorization_url, state = google.authorization_url(
+        oauth_config.authorization_base_url,
+        # online for refresh token
+        # force to always make user click authorize
+        access_type="online")
+    # State is used to prevent CSRF, keep this for later.
+    session['oauth_state'] = state
+    return redirect(authorization_url)
+
+
+@app.route('/oauth2callback', methods=["GET"])
+@get_oath_config
+def authorized(oauth_config):
+    # Note that the full callbackurl from the OAuth provider
+    # google, facebook etc will be in the request
+    google = OAuth2Session(
+        oauth_config.client_id, scope=oauth_config.scope,
+        redirect_uri=oauth_config.redirect_uri)
+    token = google.fetch_token(
+         oauth_config.token_url, client_secret=oauth_config.client_secret,
+         authorization_response=request.url)
+    session['oauth_token'] = token
     return redirect(url_for('index'))
-
-@google.tokengetter
-def get_access_token():
-    return session._get('access_token')
 
 
 @app.route('/todos/', methods=['POST'])
@@ -128,8 +157,30 @@ def _todo_get_or_404(id):
 def _todo_response(todo):
     return jsonify(**todo)
 
+
+def get_cli_options():
+    """
+    Return the work environment
+    """
+    usage = "usage: %prog options"
+    parser = OptionParser(usage=usage)
+    parser.add_option(
+        '-e', '--env', type='choice', action='store', dest='environment',
+        choices=['production', 'dev'], default='dev',
+        help='Environment to run on')
+    return parser.parse_args()
+
 if __name__ == '__main__':
+    options, args = get_cli_options()
+    global env
+    env = options.environment
+    if env is None:
+        raise ValueError('Environment has to be set to one of '
+                         'dev or prod')
     app.config.update(
         DEBUG=True,
         PROPAGATE_EXCEPTIONS=True)
+    import os
+    os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+    os.environ['OAUTHLIB_RELAX_TOKEN_SCOPE'] = 'True'
     app.run()

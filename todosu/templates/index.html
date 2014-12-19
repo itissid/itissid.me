@@ -2,34 +2,46 @@
 <html lang="en" data-framework="backbonejs">
 	<head>
 		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<title>Backbone.js • TodoMVC</title>
 		<link rel="stylesheet" href="bower_components/todomvc-common/base.css">
+		<link rel="stylesheet" href="css/bootstrap.min.css">
 	</head>
 	<body>
-		<section id="todoapp">
-			<header id="header">
-				<h1>todos</h1>
-				<input id="new-todo" placeholder="What needs to be done?" autofocus>
-			</header>
-			<section id="main">
-				<input id="toggle-all" type="checkbox">
-				<label for="toggle-all">Mark all as complete</label>
-				<ul id="todo-list"></ul>
-			</section>
-			<footer id="footer"></footer>
-		</section>
-		<footer id="info">
-			<p>Double-click to edit a todo</p>
-			<p>Written by <a href="https://github.com/addyosmani">Addy Osmani</a></p>
-			<p>Part of <a href="http://todomvc.com">TodoMVC</a></p>
-		</footer>
+		<script type="text/template" id="user-info-template">
+			<div class="pull-right">
+				<label><%- name %></label>
+			</div>
+		</script>
+		<div id="todoapp" class="container" >
+			<div class="page-header">
+				<h1> Todos MVC Example With Oauth</h1>
+			</div>
+			<p>
+			<h4><div id="user-info"></div></h4>
+			</p>
+			<div class="row">
+				<input id="new-todo" placeholder="What needs to be done?" autofocus class="col-xs-9">
+				<section id="main" class="col-xs-9">
+					<input id="toggle-all" type="checkbox">
+					<label for="toggle-all">Mark all as complete</label>
+					<ul id="todo-list"></ul>
+				</section>
+				<footer id="footer"></footer>
+				<footer id="info" class="col-xs-9">
+					<p>Double-click to edit a todo</p>
+					<p>Written by <a href="https://github.com/addyosmani">Addy Osmani</a></p>
+					<p>Part of <a href="http://todomvc.com">TodoMVC</a></p>
+				</footer>
+			</div>
+		</div>
 		<script type="text/template" id="item-template">
-			<div class="view">
-				<input class="toggle" type="checkbox" <%= completed ? 'checked' : '' %>>
+			<div class="view row" >
+				<input class="toggle col-xs-9" type="checkbox" <%= completed ? 'checked' : '' %>>
 				<label><%- title %></label>
 				<button class="destroy"></button>
 			</div>
-			<input class="edit" value="<%- title %>">
+			<input class="edit col-xs-9" value="<%- title %>">
 		</script>
 		<script type="text/template" id="stats-template">
 			<span id="todo-count"><strong><%= remaining %></strong> <%= remaining === 1 ? 'item' : 'items' %> left</span>
@@ -52,14 +64,18 @@
 		<script src="bower_components/underscore/underscore.js"></script>
 		<script src="bower_components/backbone/backbone.js"></script>
 		<script src="js/models/todo.js"></script>
+		<script src="js/models/user.js"></script>
 		<script src="js/collections/todos.js"></script>
 		<script src="js/views/todo-view.js"></script>
 		<script src="js/views/app-view.js"></script>
 		<script src="js/routers/router.js"></script>
 		<script src="js/app.js"></script>
 		<script>
+		 $(document).ready(function() {
 			app.todos.url = '{{ url_for("todo_create") }}';
 			app.todos.reset({{ todos | tojson }});
+			app.userInfo.set({{ user_info | tojson }})
+		})
 		</script>
 	</body>
 </html>
